@@ -1,4 +1,4 @@
-Platsbanken Improved v2.68
+Platsbanken Improved v2.69.0
 ----------------------
 
 ## Ansvarsfriskrivning
