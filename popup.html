@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<title>Platsbanken Improved</title>
+<style>
+  :root{
+    --bg:#f2f3f5;          /* inner background (wrapper) */
+    --card:#ffffff;
+    --cardHover:#f6f7f9;
+    --divider:#d9dce1;
+    --text:#111;
+    --muted:#d1d5db;       /* subtle text on dark */
+    --donate:#f7b731;
+    --donateHover:#f1a500;
+    --green:#16a34a;
+    --dark:#444;           /* dark grey for toggle row + manage button */
+    --darkHover:#333;
+  }
+
+  /* Let the browser’s popup chrome show through, to avoid a double rim */
+  html, body {
+    margin:0;
+    padding:0;
+    min-width:260px;
+    background:transparent;      /* <— was solid grey; now transparent */
+    color:var(--text);
+    font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+  }
+
+  /* Our visible background lives here */
+  .wrap{
+    background:var(--bg);
+    display:flex;
+    flex-direction:column;
+    min-height:100%;
+  }
+
+  .list{
+    display:flex;
+    flex-direction:column;
+    align-items:stretch;
+  }
+
+  /* Toggle row (dark) */
+  .row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    padding:14px;
+    background:var(--dark);
+    color:#fff;
+    font-size:14px;
+    line-height:1.25;
+    font-weight:600;             /* match buttons */
+  }
+  .row:hover{ background:var(--darkHover); }
+  .sub{ display:block; font-size:12px; color:var(--muted); margin-top:2px; font-weight:500; }
+
+  /* Full-width button style (flat, left-aligned, with dividers) */
+  .item{
+    appearance:none;
+    border:0;
+    border-radius:0;
+    background:var(--card);
+    text-align:left;
+    padding:14px;
+    font-size:14px;
+    line-height:1.25;
+    font-weight:600;             /* match toggle row & donate */
+    color:var(--text);
+    cursor:pointer;
+    width:100%;
+  }
+  .item + .item{ border-top:1px solid var(--divider); }
+  .item:hover{ background:var(--cardHover); }
+
+  /* Manage button (dark) */
+  #manageBtn{
+    background:var(--dark);
+    color:#fff;
+  }
+  #manageBtn:hover{ background:var(--darkHover); }
+
+  /* Toggle control */
+  .switch{
+    position:relative;
+    width:44px; height:24px; flex:0 0 auto;
+  }
+  .switch input{ position:absolute; inset:0; opacity:0; cursor:pointer; }
+  .track{
+    position:absolute; inset:0;
+    background:#666;             /* dark “off” track */
+    border-radius:999px;
+    transition:background .15s ease;
+  }
+  .thumb{
+    position:absolute; top:3px; left:3px;
+    width:18px; height:18px;
+    background:#fff; border-radius:50%;
+    box-shadow:0 1px 2px rgba(0,0,0,.3);
+    transition:transform .15s ease;
+  }
+  .switch input:checked ~ .track{ background:var(--green); }
+  .switch input:checked ~ .thumb{ transform:translateX(20px); }
+
+  .spacer{ flex:1 1 auto; }
+
+  /* Donate (only non-grey) */
+  #donateBtn{
+    background:var(--donate);
+    color:#000;
+    font-weight:600;
+  }
+  #donateBtn:hover{ background:var(--donateHover); }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="list">
+      <div class="row" id="toggleRow">
+        <div>
+          <div>Aktivera funktioner</div>
+          <span class="sub">Behövs aktiveras i tilläggshanteraren först</span>
+        </div>
+        <label class="switch" aria-label="Aktivera funktioner">
+          <input type="checkbox" id="enabledToggle">
+          <span class="track"></span>
+          <span class="thumb"></span>
+        </label>
+      </div>
+
+      <button class="item" id="manageBtn">Öppna tilläggshanteraren</button>
+
+      <div class="spacer" aria-hidden="true"></div>
+
+      <button class="item" id="donateBtn">☕ Stöd utvecklaren</button>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
