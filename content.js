@@ -350,22 +350,36 @@
       }
     });
 
-    renderTokenList = function renderTokenListImpl() {
-      const items = blockedTokens;
-      if (!items.length) { tokenList.style.display = 'none'; tokenList.innerHTML = ''; return; }
-      tokenList.style.display = 'block';
-      tokenList.innerHTML = items.map(t => `
-        <div class="pb-token-row" data-word="${t.word}"
-             style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid #f0f0f0;">
-          <input type="checkbox" class="pb-token-check" ${t.active ? 'checked' : ''} aria-label="Aktiv filtrering för '${t.word}'">
-          <span style="flex:1 1 auto;font-size:14px;">${t.word}</span>
-          <button class="pb-token-remove" aria-label="Ta bort '${t.word}'"
-                  style="background:#f3f4f6;border:1px solid #e5e7eb;border-radius:6px;padding:4px 8px;cursor:pointer;">
-            ✕
-          </button>
-        </div>
-      `).join('');
-    };
+    renderTokenList = function () {
+	tokenList.textContent = '';
+		if (!blockedTokens.length) { tokenList.style.display = 'none'; return; }
+			tokenList.style.display = 'block';
+			for (const t of blockedTokens) {
+    const row = document.createElement('div');
+    row.className = 'pb-token-row';
+    row.dataset.word = t.word;
+    row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid #f0f0f0;';
+
+    const check = document.createElement('input');
+    check.type = 'checkbox';
+    check.className = 'pb-token-check';
+    check.checked = !!t.active;
+    check.setAttribute('aria-label', "Aktiv filtrering för '" + t.word + "'");
+
+    const label = document.createElement('span');
+    label.style.cssText = 'flex:1 1 auto;font-size:14px;';
+    label.textContent = t.word;
+
+    const del = document.createElement('button');
+    del.className = 'pb-token-remove';
+    del.setAttribute('aria-label', "Ta bort '" + t.word + "'");
+    del.style.cssText = 'background:#f3f4f6;border:1px solid #e5e7eb;border-radius:6px;padding:4px 8px;cursor:pointer;';
+    del.textContent = '✕';
+
+    row.append(check, label, del);
+    tokenList.appendChild(row);
+		}
+	};
     renderTokenList();
 
     tokenList.addEventListener('click', (e) => {
