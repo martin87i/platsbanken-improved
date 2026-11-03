@@ -1004,7 +1004,12 @@
   }
 
   /* ================= TITELLÄNK + FILTRERA ================= */
-  const LINK_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3A4 4 0 0 0 11 18.7l1-1"/></svg>';
+  const mkLinkSvg = () => {
+    const NS = 'http://www.w3.org/2000/svg', svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true');
+    ['M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1', 'M14 10a4 4 0 0 0-5.7 0l-3 3A4 4 0 0 0 11 18.7l1-1'].forEach((d) => { const p = document.createElementNS(NS, 'path'); p.setAttribute('d', d); svg.appendChild(p); });
+    return svg;
+  };
   function selectedTextIn(card){
     const sel = window.getSelection && window.getSelection();
     if (!sel || sel.isCollapsed || !sel.rangeCount) return '';
@@ -1032,7 +1037,7 @@
     const wrap = card.querySelector('.pb-hide-btn-wrapper');
     if (wrap && a && !wrap.querySelector('.pb-link-btn')) {
       const lb = document.createElement('button');
-      lb.type = 'button'; lb.className = 'pb-link-btn'; lb.title = 'Öppna annonsen'; lb.setAttribute('aria-label', 'Öppna annonsen'); lb.innerHTML = LINK_SVG + '<span>Annons</span>';
+      lb.type = 'button'; lb.className = 'pb-link-btn'; lb.title = 'Öppna annonsen'; lb.setAttribute('aria-label', 'Öppna annonsen'); { const sp = document.createElement('span'); sp.textContent = 'Annons'; lb.append(mkLinkSvg(), sp); }
       lb.addEventListener('click', (e) => {
         e.preventDefault(); e.stopPropagation();
         const href = a.href || a.getAttribute('href') || ''; if (!isAdLinkHref(href)) return;
@@ -1326,7 +1331,8 @@
         ce.dataset.sig = sig;
         const nf = (n) => n.toLocaleString('sv-SE');
         const hidTot = hid + adFiltered;
-        ce.innerHTML = '<b>' + nf(vis) + '</b> visas &nbsp;·&nbsp; <b>' + nf(hidTot) + '</b> dolda';
+        ce.textContent = '';
+        { const b1 = document.createElement('b'), b2 = document.createElement('b'); b1.textContent = nf(vis); b2.textContent = nf(hidTot); ce.append(b1, ' visas \u00a0·\u00a0 ', b2, ' dolda'); }
         ce.title = nf(hid) + ' dolda på sidan' + (adFiltered ? ' + ' + nf(adFiltered) + ' som redan filtrerats bort vid hämtningen (Dölj/filterord)' : '');
       }
     }
