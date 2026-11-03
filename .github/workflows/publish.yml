@@ -1,0 +1,37 @@
+name: Publicera till AMO
+
+# Körs när du pushar en tagg som börjar på "v", t.ex. v2.69.1
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Stoppa om taggen inte matchar versionen i manifest.json
+      - name: Kontrollera att taggen matchar manifestet
+        run: |
+          VERSION=$(node -p "require('./manifest.json').version")
+          if [ "v$VERSION" != "$GITHUB_REF_NAME" ]; then
+            echo "Taggen $GITHUB_REF_NAME matchar inte manifest-versionen v$VERSION"
+            exit 1
+          fi
+
+      - name: Skicka version till AMO
+        env:
+          AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
+          AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+        run: |
+          npx --yes web-ext sign \
+            --channel=listed \
+            --approval-timeout=0 \
+            --api-key="$AMO_JWT_ISSUER" \
+            --api-secret="$AMO_JWT_SECRET" \
+            --ignore-files ".github/**" "README.md" "README.txt" "DEVELOPMENT.md"
