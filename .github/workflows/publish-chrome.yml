@@ -1,0 +1,43 @@
+name: Publicera till Chrome Web Store
+
+# Körs när du pushar en tagg som börjar på "v", t.ex. v2.70.2
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Stoppa om taggen inte matchar versionen i manifest.json
+      - name: Kontrollera att taggen matchar manifestet
+        run: |
+          VERSION=$(node -p "require('./manifest.json').version")
+          if [ "v$VERSION" != "$GITHUB_REF_NAME" ]; then
+            echo "Taggen $GITHUB_REF_NAME matchar inte manifest-versionen v$VERSION"
+            exit 1
+          fi
+
+      # Paketera tillägget utan utvecklingsfiler
+      - name: Bygg zip
+        run: |
+          zip -r "$RUNNER_TEMP/chrome-extension.zip" . \
+            -x ".git/*" ".github/*" "*.md" "README.txt" "web-ext-artifacts/*"
+
+      # Laddar upp och skickar in för granskning
+      - name: Skicka version till Chrome Web Store
+        env:
+          EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+          CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+        run: |
+          npx --yes chrome-webstore-upload-cli@3 upload \
+            --source "$RUNNER_TEMP/chrome-extension.zip" \
+            --auto-publish
