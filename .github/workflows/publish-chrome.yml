@@ -28,15 +28,15 @@ jobs:
       - name: Bygg zip
         run: |
           zip -r "$RUNNER_TEMP/chrome-extension.zip" . \
-            -x ".git/*" ".github/*" "*.md" "README.txt" "web-ext-artifacts/*" "fetched_ads/*"
+            -x ".git/*" ".github/*" "*.md" "README.txt" "web-ext-artifacts/*"
 
       # Laddar upp och skickar in för granskning
       - name: Skicka version till Chrome Web Store
         env:
           EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
-          CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
-          CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
-          REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+          CLIENT_ID: ${{ secrets.CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
         run: |
           npx --yes chrome-webstore-upload-cli@3 upload \
             --source "$RUNNER_TEMP/chrome-extension.zip" \
