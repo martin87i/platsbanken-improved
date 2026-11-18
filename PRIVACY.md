@@ -12,6 +12,7 @@ Tillägget sparar dina egna inställningar och data lokalt i din webbläsare (we
 - dolda annonser, taggar, betyg och anteckningar du lägger till
 - profiler, filter och layout i kartoteket
 - dina val för storlekar och utseende
+- jobb från arbetsgivares karriärsidor, om du själv läser in en sådan fil under fliken Externa webbplatser
 
 Denna data lämnar inte din dator. Den skickas inte till tilläggets utvecklare eller till någon tredje part. Om du tar bort tillägget eller rensar webbläsarens data raderas den. Du kan själv exportera och importera dina data via tilläggets funktion för export/import till en fil på din egen dator.
 
@@ -41,6 +42,7 @@ The extension stores your own settings and data locally in your browser (browser
 - hidden ads, tags, ratings and notes you add
 - profiles, filters and the layout of the card board
 - your size and appearance settings
+- jobs from employers' career pages, if you load such a file yourself in the Externa webbplatser tab
 
 This data never leaves your computer. It is not sent to the developer or to any third party. It is deleted if you uninstall the extension or clear the browser's data. You can export and import your data to a file on your own computer using the extension's export/import feature.
 

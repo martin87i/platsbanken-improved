@@ -34,4 +34,4 @@ jobs:
             --approval-timeout=0 \
             --api-key="$AMO_JWT_ISSUER" \
             --api-secret="$AMO_JWT_SECRET" \
-            --ignore-files ".github/**" "README.md" "README.txt" "DEVELOPMENT.md"
+            --ignore-files ".github/**" "README.md" "README.txt" "DEVELOPMENT.md" "fetched_ads/**"

@@ -343,6 +343,23 @@
     nav.digi-navigation-pagination__pagination a, nav.digi-navigation-pagination__pagination button {
       display:inline-flex !important; flex:0 0 auto !important;
     }
+
+    #pb-tagask{ position:fixed; right:16px; bottom:72px; z-index:1000002; width:min(380px,calc(100vw - 32px)); max-height:60vh; overflow:auto; box-sizing:border-box; padding:12px 14px; background:#fff; color:#1b2330; border:1px solid #b9c4d3; border-radius:10px; box-shadow:0 8px 28px rgba(15,25,45,.28); font:14px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif; }
+    #pb-tagask .pbt-h{ display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom:8px; }
+    #pb-tagask .pbt-t{ font-weight:700; }
+    #pb-tagask .pbt-s{ display:block; font-weight:400; font-size:12.5px; color:#586578; overflow-wrap:anywhere; }
+    #pb-tagask .pbt-x{ flex:none; width:28px; height:28px; padding:0; font-size:20px; line-height:1; color:#586578; background:none; border:0; border-radius:6px; cursor:pointer; }
+    #pb-tagask .pbt-x:hover{ background:#e7ebf0; color:#1b2330; }
+    #pb-tagask .pbt-chips{ display:flex; flex-wrap:wrap; gap:6px; margin:0 0 10px; }
+    #pb-tagask .pbt-chip{ padding:3px 11px; font:600 13px/1.3 inherit; color:#1b2330; background:#eef2f7; border:1.5px solid #b9c4d3; border-radius:999px; cursor:pointer; }
+    #pb-tagask .pbt-chip:hover{ border-color:#2b59c9; }
+    #pb-tagask .pbt-chip[aria-pressed="true"]{ color:#fff; background:#2b59c9; border-color:#2b59c9; }
+    #pb-tagask .pbt-none{ margin:0 0 10px; color:#586578; font-size:13px; }
+    #pb-tagask .pbt-row{ display:flex; gap:8px; }
+    #pb-tagask .pbt-in{ flex:1 1 auto; min-width:0; height:34px; padding:0 10px; font:inherit; color:#1b2330; background:#fff; border:1px solid #b9c4d3; border-radius:6px; }
+    #pb-tagask .pbt-b{ flex:none; height:34px; padding:0 12px; font:600 14px/1 inherit; color:#1b2330; background:#f7f9fb; border:1px solid #b9c4d3; border-radius:6px; cursor:pointer; }
+    #pb-tagask .pbt-b.pri{ color:#fff; background:#2b59c9; border-color:#2b59c9; }
+    #pb-tagask .pbt-f{ display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px; margin-top:10px; }
   `;
   document.documentElement.appendChild(Object.assign(document.createElement('style'), { textContent: css }));
 
@@ -488,6 +505,7 @@
     if (tab === 'kartotek' && !KB()) tab = 'ad';
     activeTab = tab;
     panel.dataset.tab = tab;
+    updateExtSave();
     for (const b of panel.querySelectorAll('.pb-tab')) {
       const on = b.dataset.tab === tab;
       b.classList.toggle('is-active', on);
@@ -512,11 +530,14 @@
     panel.classList.remove('pb-open');
     document.documentElement.classList.remove('pb-panel-open');
     restoreNativeMenus();
-    iframe.removeAttribute('src'); panel.dataset.ad = 'none';
+    iframe.removeAttribute('src'); iframe.removeAttribute('srcdoc'); panel.dataset.ad = 'none'; delete panel.dataset.ext; updateExtSave();
     updateEdge();
   }
   function openPreview(url, titleText){
+    // Jobb från karriärsidor har ingen annonssida i Platsbanken: annonsen visas från den inlästa filen
+    if (isExtHref(url)) { showExtAd(extIdOf(url), titleText); return; }
     ensurePanel();
+    iframe.removeAttribute('srcdoc'); delete panel.dataset.ext; updateExtSave();
     iframe.src = url; panel.dataset.ad = 'yes';
     titleEl.textContent = titleText || '';
     openPanel('ad');
@@ -623,16 +644,118 @@
     const q = (s) => (card && card.querySelector(s)?.textContent || '').trim();
     return { adId: id, title: q('a[href*="/platsbanken/annonser/"]'), company: q('.pb-company-name'), place: q('.pb-workplaces'), hours: '', deadline: null, description: '', applyUrl: '' };
   }
+  /* ----- Taggar direkt när en annons favoritmarkeras ----- */
+  let tagAskEl = null;
+  let tagAskOff = null;
+  // Döljer annonsen i listan (samma sak som knappen Dölj på annonsen)
+  function hideAd(adId, card){
+    const c = (card && card.isConnected) ? card : getCards().find(x => new RegExp('/' + adId + '(\\D|$)').test(getJobId(x) || ''));
+    const cid = c ? getJobId(c) : '/platsbanken/annonser/' + adId;
+    if (!cid) return;
+    hiddenJobs.add(cid); shownJobs.delete(cid);
+    saveHidden(); saveShown();
+    if (c) { const b = c.querySelector('.pb-hide-btn'); if (b) setHideButtonState(c, b, cid); applyVisibilityForCard(c, cid); }
+    syncAdFilter(false);
+  }
+  function closeTagAsk(){ if (tagAskOff) { tagAskOff(); tagAskOff = null; } if (tagAskEl) { tagAskEl.remove(); tagAskEl = null; } }
+  async function askTags(adId, title, anchor){
+    const K = KB(); if (!K || !K.allTags || !K.setTagsByAd) return;
+    let known = [];
+    try { known = await K.allTags(); } catch {}
+    closeTagAsk();
+    const tk = (x) => String(x || '').trim().toLowerCase();
+    const chosen = [];
+    const mk = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+    const box = mk('div'); box.id = 'pb-tagask'; box.setAttribute('role', 'dialog'); box.setAttribute('aria-label', 'Taggar för annonsen');
+    const head = mk('div', 'pbt-h'), ht = mk('div', 'pbt-t', 'Lägg till taggar');
+    const sub = mk('span', 'pbt-s', title || ''); ht.appendChild(sub);
+    const x = mk('button', 'pbt-x', '\u00d7'); x.type = 'button'; x.title = 'Stäng'; x.setAttribute('aria-label', 'Stäng');
+    head.append(ht, x);
+    const chips = mk('div', 'pbt-chips');
+    const none = mk('p', 'pbt-none', 'Inga taggar finns än. Skriv en egen nedan.');
+    const apply = () => { K.setTagsByAd(adId, chosen.slice()).catch(() => {}); };
+    const chipFor = new Map();
+    const addChip = (name, on) => {
+      const k = tk(name);
+      let b = chipFor.get(k);
+      if (!b) {
+        b = mk('button', 'pbt-chip', name); b.type = 'button'; b.dataset.tag = name;
+        b.addEventListener('click', () => {
+          const i = chosen.findIndex((t) => tk(t) === k);
+          if (i >= 0) { chosen.splice(i, 1); b.setAttribute('aria-pressed', 'false'); } else { chosen.push(b.dataset.tag); b.setAttribute('aria-pressed', 'true'); }
+          apply();
+        });
+        chipFor.set(k, b); chips.appendChild(b); none.hidden = true;
+      }
+      if (on && !chosen.some((t) => tk(t) === k)) { chosen.push(b.dataset.tag); }
+      b.setAttribute('aria-pressed', chosen.some((t) => tk(t) === k) ? 'true' : 'false');
+    };
+    known.slice(0, 40).forEach((t) => addChip(t.name, false));
+    none.hidden = chipFor.size > 0;
+    const row = mk('div', 'pbt-row');
+    const inp = mk('input', 'pbt-in'); inp.type = 'text'; inp.placeholder = 'Egen tagg (flera: skilj med komma)'; inp.maxLength = 120; inp.setAttribute('aria-label', 'Egen tagg');
+    const add = mk('button', 'pbt-b', 'Lägg till'); add.type = 'button';
+    const commit = () => {
+      const parts = inp.value.split(/[,;\n]/).map((p) => p.replace(/\s+/g, ' ').trim().slice(0, 40)).filter(Boolean);
+      if (!parts.length) return;
+      parts.forEach((p) => { const ex = chipFor.get(tk(p)); addChip(ex ? ex.dataset.tag : p, true); });
+      inp.value = ''; apply();
+    };
+    add.addEventListener('click', commit);
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } else if (e.key === 'Escape') { e.stopPropagation(); closeTagAsk(); } });
+    row.append(inp, add);
+    const foot = mk('div', 'pbt-f'), done = mk('button', 'pbt-b pri', 'Klar'); done.type = 'button';
+    done.title = 'Sparar taggarna och döljer annonsen i listan. Kortet finns kvar i kartoteket.';
+    foot.append(done);
+    const finish = (hide) => { if (inp.value.trim()) commit(); closeTagAsk(); if (hide === true) hideAd(adId, anchor); };
+    done.addEventListener('click', () => finish(true));
+    x.addEventListener('click', () => finish(false));
+    box.append(head, chips, none, row, foot);
+    document.body.appendChild(box); tagAskEl = box;
+    // placeras till höger om annonsen som sparades (annars nere till höger)
+    const idRe = new RegExp('/' + String(adId).replace(/\D/g, '') + '(\\D|$)');
+    const findAnchor = () => (anchor && anchor.isConnected) ? anchor : (getCards().find((x) => idRe.test(getJobId(x) || '')) || null);
+    const place = () => {
+      const a = findAnchor(); if (!a) return;
+      const r = a.getBoundingClientRect(); if (!r.width && !r.height) return;
+      const w = box.offsetWidth, h = box.offsetHeight, vw = document.documentElement.clientWidth, vh = window.innerHeight;
+      let left = r.right + 10; if (left + w > vw - 8) left = Math.max(8, r.left - w - 10);
+      const top = Math.max(8, Math.min(r.top, vh - h - 8));
+      box.style.left = left + 'px'; box.style.top = top + 'px'; box.style.right = 'auto'; box.style.bottom = 'auto';
+    };
+    place(); setTimeout(place, 300); setTimeout(place, 1000);
+    window.addEventListener('scroll', place, true); window.addEventListener('resize', place);
+    tagAskOff = () => { window.removeEventListener('scroll', place, true); window.removeEventListener('resize', place); };
+    try { inp.focus({ preventScroll: true }); } catch {}
+  }
+  let handledAt = null;
   async function handleSaveChange(adId, saved, card, savedItem){
     const K = KB(); if (!K || !adId) return;
+    // klick-detekteringen och pollningen kan båda upptäcka samma sparande: hantera varje annons bara en gång per 6 s
+    const nowT = Date.now(), key = (saved ? 's' : 'u') + adId;
+    handledAt = handledAt || new Map();
+    if (handledAt.has(key) && nowT - handledAt.get(key) < 6000) return;
+    // två kopior av tillägget i samma sida delar DOM: den som hinner först tar sparandet
+    try {
+      const el = document.documentElement, mk = el.getAttribute('data-pb-handled') || '', pp = mk.split('|');
+      if (pp[0] === key && nowT - Number(pp[1]) < 6000) return;
+      el.setAttribute('data-pb-handled', key + '|' + nowT);
+    } catch {}
+    handledAt.set(key, nowT); handledAt.delete((saved ? 'u' : 's') + adId);
     if (saved) {
       let data = null;
       for (let i = 0; i < 2 && !data; i++) data = await K.fetchAd(adId);
       if (!data) data = savedItem ? K.dataFromSaved(savedItem) : adFromCard(card, adId);
       if (savedItem && savedItem.isApplied) data.applied = K.todayISO();
-      const r = await K.addFromAd(data);
-      if (r.status === 'added') notice('Lade till kort i kartoteket: ' + (data.title || 'annons'), { label: 'Öppna', fn: () => openPanel('kartotek') });
+      let r;
+      try { r = await K.addFromAd(data); } catch (err) { notice('Kunde inte lägga till kortet i kartoteket: ' + (err && err.message || err)); return; }
+      if (r && r.status === 'exists' && !tagAskEl) {   // kortet fanns redan (t.ex. dubbel hantering): erbjud ändå taggar
+        notice('Kortet finns redan i kartoteket (' + (Number(r.ageMs) < 15000 ? 'lades till nyss av något annat, ' + Math.round(Number(r.ageMs) / 1000) + ' s sedan' : 'sparades för ' + Math.round(Number(r.ageMs) / 60000) + ' min sedan') + '): ' + (data.title || 'annons') + ' [kort: ' + r.via + ' | denna: ' + r.me + ']', { label: 'Öppna', fn: () => openPanel('kartotek') });
+        askTags(String(adId), data.title || '', card ? (card.closest('.card-container') || card) : null);
+      }
+      if (r.status === 'added') { notice('Lade till kort i kartoteket: ' + (data.title || 'annons'), { label: 'Öppna', fn: () => openPanel('kartotek') }); askTags(String(adId), data.title || '', card ? (card.closest('.card-container') || card) : null); }
     } else {
+      closeTagAsk();
       const old = await K.removeByAd(adId);
       if (old) notice('Kortet togs bort från kartoteket.', { label: 'Ångra', fn: () => K.restoreCard(old) });
     }
@@ -684,9 +807,17 @@
       const FILTER = { ids: new Set(), shown: new Set(), words: [], invert: false };
       let cap = STEP, state = null, filterReady = null, gotFilter = false;
       filterReady = new Promise((res) => { window.__pbFilterGo = res; setTimeout(res, 1500); });
+      // Jobb från karriärsidor som användaren läst in (jobbsamlaren). Visas under fliken Externa webbplatser.
+      // Filen kan ta några sekunder att läsa in. Säger tillägget att den läses in (pbExtPending) väntar sökningen
+      // på den, högst 20 s; annars bara 1,5 s.
+      const EXT = { ads: [], v: 0 };
+      let extTimer = 0;
+      const extReady = new Promise((res) => { window.__pbExtGo = res; extTimer = setTimeout(res, 1500); });
       window.addEventListener('message', (e) => {
         if (e.source !== window || !e.data) return;
         const d = e.data;
+        if (d.pbExtPending) { clearTimeout(extTimer); extTimer = setTimeout(window.__pbExtGo, 20000); }
+        if (d.pbExt) { EXT.ads = Array.isArray(d.pbExt.ads) ? d.pbExt.ads : []; EXT.v = d.pbExt.v || 0; window.__pbExtGo(); }
         if (d.pbMore) cap += STEP;
         if (d.pbFilter) {
           FILTER.ids = new Set((d.pbFilter.ids || []).map(String));
@@ -709,6 +840,56 @@
       // Vanligt läge: släpp igenom allt som INTE är blockerat. "Endast dolda": släpp bara igenom det blockerade.
       const passes = (a) => (FILTER.invert ? blocked(a) : !blocked(a));
       const iso = (ms) => new Date(ms).toISOString();
+
+      // Vilka inlästa jobb som matchar sökningen. Filtrerar som Platsbanken: alla sökord måste finnas
+      // (ord med minus får inte finnas), ort och yrke matchas på Arbetsförmedlingens concept-id.
+      // Filtertyper som jobben saknar uppgifter för (t.ex. anställningsform) ger inga träffar.
+      const PLACE = ['municipality', 'region', 'country'], OCC = ['occupation', 'occupationGroup', 'occupationField'];
+      const KNOWN = PLACE.concat(OCC, ['freetext']);
+      function extQuery(req) {
+        const by = {};
+        for (const f of (req.filters || [])) if (f && f.type) (by[f.type] = by[f.type] || []).push(String(f.value));
+        const words = [], nots = [];
+        for (const w of (String((by.freetext || [''])[0]).toLowerCase().match(/"[^"]+"|\S+/g) || [])) {
+          const neg = w[0] === '-' && w.length > 1, t = (neg ? w.slice(1) : w).replace(/"/g, '').trim();
+          if (t) (neg ? nots : words).push(t);
+        }
+        return { by, words, nots, unknown: Object.keys(by).some((t) => KNOWN.indexOf(t) < 0) };
+      }
+      function matchExt(req) {
+        const q = extQuery(req);
+        if (q.unknown) return [];
+        const has = (a, types) => {
+          let any = false;
+          for (const t of types) {
+            if (!q.by[t]) continue;
+            any = true;
+            const v = a.x ? a.x[t] : null, arr = Array.isArray(v) ? v : [v];
+            for (const want of q.by[t]) if (arr.indexOf(want) >= 0) return true;
+          }
+          return !any;
+        };
+        const from = req.fromDate ? Date.parse(req.fromDate) : NaN, to = req.toDate ? Date.parse(req.toDate) : NaN;
+        return EXT.ads.filter((a) => {
+          if (!has(a, PLACE) || !has(a, OCC)) return false;
+          const p = Date.parse(a.publishedDate || '');
+          if (!isNaN(from) && !(p >= from)) return false;
+          if (!isNaN(to) && p > to) return false;
+          if (q.words.length || q.nots.length) {
+            const t = [a.title, a.employerName, a.occupation, a.workplace].concat(a.workplaces || []).join(' ').toLowerCase();
+            for (const w of q.words) if (t.indexOf(w) < 0) return false;
+            for (const w of q.nots) if (t.indexOf(w) >= 0) return false;
+          }
+          return true;
+        });
+      }
+      // Sortering: vid relevans och sökord kommer Platsbankens egna träffar först, annars blandas allt efter datum
+      function mergeExt(theirs, ext, req) {
+        const t = (a) => Date.parse(a.publishedDate || '') || 0;
+        const mine = ext.slice().sort((a, b) => t(b) - t(a));
+        if (/relev/i.test(String(req.order || '')) && extQuery(req).words.length) return theirs.concat(mine);
+        return theirs.concat(mine).sort((a, b) => t(b) - t(a));
+      }
 
       async function makePlan(st) {
         const count = (f, t) => post(st.url, Object.assign({}, st.base, { fromDate: f, toDate: t, maxRecords: 0, startIndex: 0 })).then((j) => (j ? Number(j.numberOfAds) || 0 : 0));
@@ -759,10 +940,21 @@
         if (!st) return send.apply(this, args);
         let req;
         try { req = JSON.parse(body); } catch (e) { return send.apply(this, args); }
+        // Externa webbplatser: blanda in inlästa jobb från karriärsidor, om några finns
+        if (req && req.source === 'joblinks') {
+          extReady.then(() => {
+            if (!EXT.ads.length) { st.skip = true; return send.apply(xhr, args); }
+            if (!(req.maxRecords > 0)) { st.extCount = matchExt(req).length; return send.apply(xhr, args); } // bara antal, t.ex. till flikens rubrik
+            run(true);
+          });
+          return;
+        }
         if (!req || !(req.maxRecords > 0) || req.source !== 'pb') { st.skip = true; return send.apply(this, args); }
+        run(false);
+        function run(links) {
         const base = Object.assign({}, req);
         delete base.startIndex; delete base.maxRecords; delete base.toDate; delete base.fromDate;
-        const key = JSON.stringify(base) + '|' + req.toDate;
+        const key = JSON.stringify(base) + '|' + req.toDate + (links ? '|ext' + EXT.v : '');
         if (!state || state.key !== key) {
           state = { key, url: st.url, base, to: req.toDate || new Date().toISOString(), raw: [], ids: new Set(), li: 0, off: 0, exhausted: false, total: 0, leaves: null, q: Promise.resolve() };
           cap = STEP;
@@ -771,22 +963,36 @@
         s.q = s.q.then(async () => {
           await filterReady;
           if (!s.leaves) await makePlan(s);
-          await fill(s, cap);
+          // Externa webbplatser har få annonser: hämta alla direkt så att de inlästa jobben kan sorteras in rätt
+          await fill(s, links ? Infinity : cap);
+          if (links && !s.extAdded) {
+            s.extAdded = true;
+            const ext = matchExt(req).filter((a) => !s.ids.has(a.id));
+            for (const a of ext) s.ids.add(a.id);
+            s.raw = mergeExt(s.raw, ext, req);
+            s.total += ext.length;
+          }
           const pass = s.raw.filter(passes);
           st.ads = pass.slice(0, cap);
           st.total = s.total;
           st.msg = { pbTotal: s.total, pbShown: st.ads.length, pbFiltered: s.raw.length - pass.length, pbMore: pass.length > cap || !s.exhausted };
           send.call(xhr, JSON.stringify(Object.assign({}, req, { startIndex: 0, maxRecords: 1 })));
         }).catch(() => { st.skip = true; send.apply(xhr, args); });
+        }
       };
       function merge(xhr, v) {
         const st = xhr.__pb;
-        if (!st || st.skip || !st.ads) return v;
+        if (!st || st.skip || (!st.ads && st.extCount === undefined)) return v;
         const isStr = typeof v === 'string';
         let j = v;
         try { if (isStr) j = JSON.parse(v); } catch (e) { return v; }
-        if (!j || !Array.isArray(j.ads)) return v;
+        if (!j || (st.ads && !Array.isArray(j.ads))) return v;
         if (st.src === v && st.out) return st.out;
+        if (!st.ads) { // antalsfråga: lägg till de inlästa jobben i antalet
+          const c = Object.assign({}, j, { numberOfAds: (Number(j.numberOfAds) || 0) + st.extCount });
+          st.src = v; st.out = isStr ? JSON.stringify(c) : c;
+          return st.out;
+        }
         const o = Object.assign({}, j, { ads: st.ads, numberOfAds: st.total });
         st.src = v; st.out = isStr ? JSON.stringify(o) : o;
         try { window.postMessage(st.msg, '*'); } catch (e) {}
@@ -1068,6 +1274,18 @@
       });
       const lbx = wrap.querySelector('.pb-link-btn'); wrap.insertBefore(fb, lbx ? lbx.nextSibling : wrap.firstChild);
     }
+    // Knapparna ligger längst ned i rubrikdelen. Har kortet för lite under titeln (t.ex. annonser under
+    // Externa webbplatser, där arbetsgivare och ort är tomma) får rubrikdelen mer luft, så att knapparna
+    // hamnar under titeln i stället för över den.
+    if (h3 && wrap) {
+      const hc = h3.closest('.header-container');
+      const key = card.dataset.pbLines + '|' + wrap.offsetHeight + '|' + (hc.textContent || '').length;
+      if (hc && hc.offsetParent && card.dataset.pbFit !== key) {
+        card.dataset.pbFit = key;
+        const over = h3.getBoundingClientRect().bottom - wrap.getBoundingClientRect().top + 4;
+        if (over > 0) hc.style.paddingBottom = ((parseFloat(getComputedStyle(hc).paddingBottom) || 0) + over) + 'px';
+      }
+    }
   }
 
   /* ================= PAGINATION ================= */
@@ -1137,11 +1355,22 @@
   let renderTokenList = () => {}; // placeholder for hoisting
 
   function ensureToolbar() {
-    if (document.getElementById('pb-tools')) return;
+    const existing = document.getElementById('pb-tools');
+    if (existing) {
+      // om rutan sattes in i reservläge (inga kort) och kort nu dykt upp: flytta den före första kortet
+      const fc = document.querySelector('.card-container');
+      if (fc && existing.classList.contains('pb-tools-fallback') && fc.parentElement) {
+        existing.classList.remove('pb-tools-fallback');
+        fc.parentElement.insertBefore(existing, fc);
+      }
+      return;
+    }
     const firstCard = document.querySelector('.card-container');
     // startsidan (ingen sökning gjord): filterrutan läggs under sökrutan
     const startBox = !firstCard ? document.querySelector('pb-page-start .section-search-start') : null;
-    if (!firstCard && !startBox) return;
+    // alla annonser dolda/bortfiltrerade vid hämtning: inga kort i DOM -> lägg rutan under träffrubriken
+    const headEl = (!firstCard && !startBox) ? findCountHeading() : null;
+    if (!firstCard && !startBox && !headEl) return;
 
     const bar = document.createElement('div');
     bar.id = 'pb-tools';
@@ -1317,7 +1546,12 @@
     });
 
     if (firstCard) firstCard.parentElement.insertBefore(bar, firstCard);
-    else { bar.classList.add('pb-tools-start'); (startBox.closest('.search-container') || startBox).after(bar); }
+    else if (startBox) { bar.classList.add('pb-tools-start'); (startBox.closest('.search-container') || startBox).after(bar); }
+    else {
+      bar.classList.add('pb-tools-start','pb-tools-fallback');
+      const sortEl = headEl.nextElementSibling && headEl.nextElementSibling.classList.contains('pb-sort-moved') ? headEl.nextElementSibling : headEl;
+      sortEl.after(bar);
+    }
     renderTokenList();
     updateToolbarState();
   }
@@ -1366,6 +1600,7 @@
     const href=a.href||a.getAttribute('href')||''; if(!isAdLinkHref(href)) return;
     if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
     e.preventDefault(); e.stopPropagation();
+    if (isExtHref(href)) { if (e.type === 'click') openPreview(href, (a.textContent || '').trim()); return; } // bara en gång, inte vid pointerdown/mousedown
     openPreview(href,(a.textContent||'').trim());
   }
   // capture-phase & document-start so we win
@@ -1375,7 +1610,7 @@
     const a=e.target && e.target.tagName==='A'?e.target:null; if(!a||!a.closest('.card-container')) return;
     const href=a.href||a.getAttribute('href')||''; if(!isAdLinkHref(href)) return;
     if(typeof e.stopImmediatePropagation==='function') e.stopImmediatePropagation();
-    e.preventDefault(); e.stopPropagation(); openPreview(href,(a.textContent||'').trim());
+    e.preventDefault(); e.stopPropagation(); openPreview(href,(a.textContent||'').trim()); // openPreview öppnar karriärsidan för inlästa jobb
   },true);
 
   /* ================= MAIN ================= */
@@ -1394,12 +1629,286 @@
     sort.classList.add('pb-sort-moved');
     head.after(sort);
   }
+  /* ================= JOBB FRÅN KARRIÄRSIDOR (jobbsamlaren) ================= */
+  // Jobb som bara finns på arbetsgivarnas egna karriärsidor, från jobbsamlaren. De visas under fliken
+  // Externa webbplatser i en egen färg, kan läsas i högerfönstret och sparas i kartoteket.
+  // Filen läses från tilläggets mapp fetched_ads, eller läses in för hand. Allt stannar lokalt.
+  const EXT_KEY = 'pb_extJobs', EXT_FORMAT = 'jobbsamlare-1';
+  const EXT_FILES = ['fetched_ads/jobb_utanfor_platsbanken.jsonl', 'fetched_ads/platsbanken_improved.json'];
+  let extData = null, extFromFolder = false;
+  const extById = new Map();
+  function extSet(d) {
+    extData = d && Array.isArray(d.ads) ? d : null;
+    extById.clear();
+    for (const a of (extData ? extData.ads : [])) extById.set(String(a.id), a);
+  }
+  // Sidans värld får bara det som behövs för sökträffarna, inte annonstexterna
+  const extPost = () => window.postMessage({ pbExt: { ads: extData ? extData.ads.map(({ d, ...card }) => card) : [], v: extData ? extData.loadedAt : 0 } }, '*');
+  const extUrl = (ex) => { const u = ex && ex.sourceLinks && ex.sourceLinks[0] && ex.sourceLinks[0].url; return /^https?:\/\//i.test(u || '') ? u : null; };
+  // Bara jobb med titel och en vanlig webbadress tas med
+  const cleanExt = (ads) => ads.filter(a => a && typeof a.id === 'string' && a.id.startsWith('jbs-') && typeof a.title === 'string' && extUrl(a));
+
+  // En annons i Platsbankens fullständiga format (jsonl-filen) blir en sökträff plus annonsdetaljer (d)
+  function extFromFull(ad) {
+    const list = Array.isArray(ad.workplace_addresses) && ad.workplace_addresses.length ? ad.workplace_addresses : [ad.workplace_address || {}];
+    const uniq = (xs) => xs.filter((v, i) => v && xs.indexOf(v) === i);
+    const places = uniq(list.map(w => w && (w.municipality || w.city)));
+    const ids = (k) => uniq(list.map(w => w && w[k]));
+    const lab = (o) => (o && o.label) || null, cid = (o) => (o && o.concept_id) || null;
+    const s = String(ad.source_type || '').split('_').pop() || '', system = s ? s[0] + s.slice(1).toLowerCase() : '';
+    const emp = (ad.employer && ad.employer.name) || '';
+    return {
+      id: 'jbs-' + ad.id, title: String(ad.headline || '').trim(), employerName: emp, workplaceName: emp,
+      workplace: places[0] || null, workplaces: places.length > 1 ? places : [],
+      occupation: lab(ad.occupation_group), publishedDate: ad.publication_date || null, lastApplicationDate: ad.application_deadline || null,
+      positions: ad.number_of_vacancies || null, published: true, unspecifiedWorkplace: null, workplaceModel: null,
+      sourceLinks: [{ label: system, url: ad.webpage_url }],
+      x: { municipality: ids('municipality_concept_id'), region: ids('region_concept_id'), country: ids('country_concept_id'),
+           occupation: cid(ad.occupation), occupationGroup: cid(ad.occupation_group), occupationField: cid(ad.occupation_field), system },
+      d: { text: String((ad.description && ad.description.text) || ''),
+           hours: [lab(ad.working_hours_type), lab(ad.employment_type), lab(ad.duration)].filter(Boolean).join(' · '),
+           salary: String(ad.salary_description || '') }
+    };
+  }
+  // Läser antingen jsonl-filen (en annons per rad, med annonstext) eller den kortare json-filen (utan annonstext)
+  function parseExt(text) {
+    const t = String(text || '').replace(/^﻿/, '');
+    try {
+      const d = JSON.parse(t);
+      if (d && d.format === EXT_FORMAT && Array.isArray(d.ads)) return { generated: String(d.generated || ''), ads: cleanExt(d.ads) };
+    } catch {}
+    const ads = []; let newest = '';
+    for (const line of t.split('\n')) {
+      if (!line.trim()) continue;
+      let ad; try { ad = JSON.parse(line); } catch { continue; }
+      if (!ad || !ad.id || !ad.headline) continue;
+      ads.push(extFromFull(ad));
+      const ts = Number(ad.timestamp) || 0; if (ts && (!newest || ts > newest)) newest = ts;
+    }
+    if (!ads.length) return null;
+    const gen = newest ? new Date(newest) : null;
+    return { generated: gen ? gen.getFullYear() + '-' + String(gen.getMonth() + 1).padStart(2, '0') + '-' + String(gen.getDate()).padStart(2, '0') : '', ads: cleanExt(ads) };
+  }
+  // Ligger en fil i tilläggets mapp fetched_ads används den, och går före en fil som lästs in för hand
+  async function loadExtFolder() {
+    for (const f of EXT_FILES) {
+      try {
+        const r = await fetch(api.runtime.getURL(f), { cache: 'no-store' });
+        if (!r.ok) continue;
+        const text = await r.text();
+        const p = parseExt(text);
+        if (p && p.ads.length) return Object.assign(p, { loadedAt: 'mapp:' + f + ':' + text.length + ':' + p.ads.length });
+      } catch {}
+    }
+    return null;
+  }
+  window.postMessage({ pbExtPending: true }, '*'); // sökningen väntar tills filen är inläst
+  (async () => {
+    const folder = api ? await loadExtFolder() : null;
+    if (folder) { extFromFolder = true; extSet(folder); }
+    else try { if (api) { const r = await api.storage.local.get(EXT_KEY); extSet(r[EXT_KEY]); } } catch {}
+    extPost();
+    scheduleTick(40);
+    extFillKartotek();
+  })();
+  // Ritar om listan; utan sidväxlare (få träffar) laddas sidan om, men bara om fliken Externa webbplatser visas
+  function extChanged(d) { extSet(d); extPost(); if (!refreshAds() && externaTabActive()) location.reload(); scheduleTick(40); extFillKartotek(); }
+  // Sparade kort utan annonstext får texten från filen, om den finns där nu
+  function extFillKartotek() {
+    const K = KB(); if (!K || !K.fillDescriptions || !extById.size) return;
+    K.ready.then(() => K.fillDescriptions((id) => { const a = extById.get(id); return a && a.d ? a.d.text : ''; })).catch(() => {});
+  }
+  try {
+    if (api && api.storage.onChanged) api.storage.onChanged.addListener((changes, area) => {
+      if (area === 'local' && changes[EXT_KEY] && !extFromFolder) extChanged(changes[EXT_KEY].newValue);
+    });
+  } catch {}
+  // Länkar till hämtade jobb: /platsbanken/annonser/joblinks/jbs-… (sökträffen) eller /platsbanken/annonser/jbs-… (kartoteket)
+  const EXT_RE = /\/platsbanken\/annonser\/(?:joblinks\/)?(jbs-[A-Za-z0-9_-]+)/;
+  const isExtHref = (href) => EXT_RE.test(String(href || ''));
+  const extIdOf = (href) => { const m = EXT_RE.exec(String(href || '')); return m ? m[1] : ''; };
+  const extOf = (href) => extById.get(extIdOf(href)) || null;
+
+  document.documentElement.appendChild(Object.assign(document.createElement('style'), { textContent: `
+    .card-container.pb-ext-card{ background:#fff4e0 !important; box-shadow:inset 5px 0 0 #e08a1e; }
+    .card-container.pb-ext-card pb-feature-save-job, .card-container.pb-ext-card pb-feature-applied-indicator{ display:none !important; }
+    .pb-ext-badge{ display:inline-block; margin-left:10px; vertical-align:baseline; padding:1px 9px; border-radius:10px; background:#f7d9a8; color:#5c3700; font-size:12px; font-weight:600; line-height:1.5; cursor:default; }
+    .pb-ext-save{ display:inline-flex; align-items:center; gap:6px; padding:6px 4px; font:inherit; font-size:17px; font-weight:600; color:#1b54c0; background:none; border:0; cursor:pointer; white-space:nowrap; }
+    .pb-ext-save::before{ content:'\\2661'; font-size:22px; line-height:1; }
+    .pb-ext-save.is-saved::before{ content:'\\2665'; }
+    .pb-ext-save:hover{ text-decoration:underline; }
+    #pb-ext-save{ margin-right:8px; font:inherit; font-size:13px; font-weight:600; padding:3px 10px; border-radius:6px; border:1px solid #2b59c9; background:#fff; color:#2b59c9; cursor:pointer; }
+    #pb-ext-save:hover{ background:#e8eefb; }
+    #pb-ext-save.is-saved{ background:#2b59c9; color:#fff; }
+    #pb-extbar{ display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; margin:10px 0; padding:8px 12px; border-radius:8px; background:#fff4e0; border:1px solid #f0c98a; color:#3d2a00; font-size:14px; }
+    #pb-extbar .pb-ext-dot{ width:12px; height:12px; border-radius:3px; background:#e08a1e; flex:none; }
+    #pb-extbar .pb-ext-txt{ flex:1 1 260px; }
+    #pb-extbar button{ font:inherit; font-size:13px; padding:4px 10px; border-radius:6px; border:1px solid #c98a2e; background:#fff; color:#3d2a00; cursor:pointer; }
+    #pb-extbar button:hover{ background:#fbe6c2; }
+  ` }));
+
+  /* ----- Kartoteket ----- */
+  const extDay = (s) => (typeof s === 'string' && /^\d{4}-\d{2}-\d{2}/.test(s)) ? s.slice(0, 10) : '';
+  const extPlaces = (a) => (a.workplaces && a.workplaces.length ? a.workplaces : [a.workplace]).filter(Boolean);
+  function extKartData(a) {
+    const d = a.d || {};
+    return { adId: a.id, title: a.title, company: a.employerName || '', place: extPlaces(a).join(', '), hours: d.hours || '',
+      deadline: extDay(a.lastApplicationDate) || null, published: extDay(a.publishedDate), description: d.text || '',
+      applyUrl: extUrl(a) || '', source: 'karriarsida', pubTried: 1 };
+  }
+  const extSaved = (id) => { const K = KB(); return !!(K && K.hasAd && K.hasAd(id)); };
+  async function toggleExtSave(a, anchor) {
+    const K = KB(); if (!K || !a) return;
+    try {
+      if (extSaved(a.id)) {
+        const old = await K.removeByAd(a.id);
+        if (old) notice('Kortet togs bort från kartoteket.', { label: 'Ångra', fn: () => K.restoreCard(old) });
+      } else {
+        const r = await K.addFromAd(extKartData(a));
+        if (r && r.status === 'added') {
+          notice('Lade till kort i kartoteket: ' + a.title, { label: 'Öppna', fn: () => openPanel('kartotek') });
+          askTags(a.id, a.title, anchor || null);
+        } else if (r && r.status === 'exists') notice('Kortet finns redan i kartoteket: ' + a.title, { label: 'Öppna', fn: () => openPanel('kartotek') });
+      }
+    } catch (err) { notice('Kunde inte ändra kartoteket: ' + (err && err.message || err)); }
+    scheduleTick(40); updateExtSave();
+  }
+  function paintSave(btn, id) {
+    const on = extSaved(id), big = btn.classList.contains('pb-ext-save');
+    const t = on ? (big ? 'Sparad annons' : 'Sparad') : (big ? 'Spara annons' : 'Spara');
+    btn.classList.toggle('is-saved', on);
+    if (btn.textContent !== t) btn.textContent = t;
+    btn.title = on ? 'Finns i kartoteket. Klicka för att ta bort kortet.' : 'Spara annonsen i kartoteket';
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
+
+  /* ----- Sökträffarna ----- */
+  function decorateExt(card) {
+    const id = isExtHref(getJobId(card)) ? extIdOf(getJobId(card)) : '';
+    const ex = id ? extById.get(id) : null;
+    card.classList.toggle('pb-ext-card', !!ex);
+    let b = card.querySelector('.pb-ext-badge'), s = card.querySelector('.pb-ext-save');
+    if (!ex) { if (b) b.remove(); if (s) s.remove(); return; }
+    if (!b || !s || b.dataset.id !== ex.id) {
+      if (b) b.remove(); if (s) s.remove();
+      // Märket längst ned i kortets högra hörn, spara-knappen där Platsbankens egen "Spara annons" sitter
+      b = document.createElement('div'); b.className = 'pb-ext-badge'; b.dataset.id = ex.id;
+      const sys = ex.x && ex.x.system;
+      b.textContent = 'Hämtad externt';
+      b.title = 'Annonsen finns inte i Platsbanken. Den hämtades från arbetsgivarens egen karriärsida' + (sys ? ' (' + sys + ')' : '') + '.';
+      s = document.createElement('button'); s.type = 'button'; s.className = 'pb-ext-save'; s.dataset.id = ex.id;
+      const stop = (e) => { e.preventDefault(); e.stopPropagation(); if (e.stopImmediatePropagation) e.stopImmediatePropagation(); };
+      ['pointerdown', 'mousedown'].forEach(t => s.addEventListener(t, stop));
+      s.addEventListener('click', (e) => { stop(e); toggleExtSave(extById.get(s.dataset.id), card); });
+      // Direkt till höger om publiceringstiden; finns den inte, längst ned till vänster
+      const date = card.querySelector('.pb-job-date');
+      if (date) date.appendChild(b); else (card.querySelector('.bottom__left') || card).appendChild(b);
+      (card.querySelector('.bottom__right') || card.querySelector('.header-container') || card).appendChild(s);
+    }
+    paintSave(s, ex.id);
+  }
+
+  /* ----- Annonsen i högerfönstret ----- */
+  const escH = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  function extDoc(a, id) {
+    const css = 'body{margin:0;padding:20px 24px 48px;font:16px/1.55 system-ui,"Segoe UI",sans-serif;color:#1b2330;background:#fff}'
+      + 'main{max-width:820px}.src{display:inline-block;padding:3px 10px;border-radius:10px;background:#f7d9a8;color:#5c3700;font-size:13px;font-weight:600}'
+      + 'h1{margin:12px 0 4px;font-size:26px;line-height:1.25}.emp{font-size:17px;font-weight:600}'
+      + 'dl{display:grid;grid-template-columns:max-content 1fr;gap:4px 16px;margin:16px 0}dt{color:#586578}dd{margin:0}'
+      + '.apply{display:inline-block;margin:4px 0 22px;padding:10px 16px;border-radius:6px;background:#2b59c9;color:#fff;font-weight:600;text-decoration:none}'
+      + '.text{white-space:pre-wrap;overflow-wrap:anywhere}.note{margin-top:28px;font-size:13px;color:#586578}';
+    const head = '<!doctype html><html lang="sv"><head><meta charset="utf-8">'
+      + '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'">'
+      + '<base target="_blank"><style>' + css + '</style></head><body><main>';
+    if (!a) return head + '<h1>Annonsen finns inte längre</h1><p>Jobbet finns inte i den inlästa filen från jobbsamlaren. Det kan ha tagits bort från karriärsidan, eller så har filen bytts ut.</p></main></body></html>';
+    const d = a.d || {}, url = extUrl(a), sys = (a.x && a.x.system) || '';
+    const rows = [['Ort', extPlaces(a).join(', ')], ['Yrke', a.occupation], ['Omfattning', d.hours], ['Lön', d.salary],
+      ['Publicerad', extDay(a.publishedDate)], ['Sista ansökningsdag', extDay(a.lastApplicationDate)]].filter(r => r[1]);
+    return head
+      + '<span class="src">Hämtad externt' + (sys ? ' · ' + escH(sys) : '') + '</span>'
+      + '<h1>' + escH(a.title) + '</h1><div class="emp">' + escH(a.employerName) + '</div>'
+      + (rows.length ? '<dl>' + rows.map(r => '<dt>' + escH(r[0]) + '</dt><dd>' + escH(r[1]) + '</dd>').join('') + '</dl>' : '')
+      + (url ? '<a class="apply" href="' + escH(url) + '" rel="noopener noreferrer">Till annonsen på karriärsidan</a>' : '')
+      + (d.text ? '<div class="text">' + escH(d.text) + '</div>' : '<p>Annonstexten finns inte i filen. Läs annonsen på karriärsidan.</p>')
+      + '<p class="note">Annonsen finns inte i Platsbanken. Den hämtades av jobbsamlaren från arbetsgivarens egen karriärsida. Ansök via karriärsidan.</p>'
+      + '</main></body></html>';
+  }
+  function showExtAd(id, titleText) {
+    ensurePanel();
+    const a = extById.get(id) || null;
+    iframe.removeAttribute('src');
+    iframe.srcdoc = extDoc(a, id);
+    panel.dataset.ad = 'yes'; panel.dataset.ext = id;
+    titleEl.textContent = (a && a.title) || titleText || '';
+    openPanel('ad');
+    updateExtSave();
+  }
+  // Spara-knapp i högerfönstrets sidhuvud när en hämtad annons visas
+  function updateExtSave() {
+    if (!panel) return;
+    const right = panel.querySelector('#pb-header-right'); if (!right) return;
+    let b = right.querySelector('#pb-ext-save');
+    const id = panel.dataset.ext, a = id ? extById.get(id) : null;
+    if (!a || activeTab !== 'ad') { if (b) b.hidden = true; return; }
+    if (!b) {
+      b = document.createElement('button'); b.type = 'button'; b.id = 'pb-ext-save';
+      b.addEventListener('click', () => { const cur = panel.dataset.ext; toggleExtSave(extById.get(cur), getCards().find(c => extIdOf(getJobId(c)) === cur) || null); });
+      right.insertBefore(b, right.querySelector('#pb-close'));
+    }
+    b.hidden = false;
+    paintSave(b, a.id);
+  }
+
+  /* ----- Raden i fliken Externa webbplatser ----- */
+  const externaTabActive = () => [...document.querySelectorAll('[role="tab"]')].some(t => /externa/i.test(t.textContent || '') && t.getAttribute('aria-selected') === 'true');
+  function ensureExtBar() {
+    const tabs = document.querySelector('pb-feature-tabs');
+    let bar = document.getElementById('pb-extbar');
+    if (!tabs || !externaTabActive()) { if (bar) bar.remove(); return; }
+    if (!bar) {
+      bar = document.createElement('div'); bar.id = 'pb-extbar';
+      bar.innerHTML = '<span class="pb-ext-dot"></span><span class="pb-ext-txt"></span><button type="button" data-a="load"></button><button type="button" data-a="clear">Ta bort</button><input type="file" accept=".jsonl,.json,application/json" hidden>';
+      const input = bar.querySelector('input');
+      bar.addEventListener('click', (e) => {
+        const a = e.target.closest && e.target.closest('button'); if (!a) return;
+        if (a.dataset.a === 'load') input.click();
+        if (a.dataset.a === 'clear' && confirm('Ta bort de inlästa jobben från karriärsidor? Kort i kartoteket finns kvar.')) {
+          try { api && api.storage.local.remove(EXT_KEY); } catch {}
+          extChanged(null);
+        }
+      });
+      input.addEventListener('change', async () => {
+        const f = input.files && input.files[0]; input.value = '';
+        if (f) await importExt(f);
+      });
+      tabs.after(bar);
+    } else if (bar.previousElementSibling !== tabs) tabs.after(bar);
+    const n = extData ? extData.ads.length : 0;
+    const txt = n
+      ? `${n.toLocaleString('sv-SE')} jobb från arbetsgivares egna karriärsidor visas här i orange. De finns inte i Platsbanken. Fil från ${extData.generated || 'okänt datum'}${extFromFolder ? ', läst från tilläggets mapp fetched_ads' : ''}.`
+      : 'Visa även jobb som bara finns på arbetsgivares egna karriärsidor: läs in jobb_utanfor_platsbanken.jsonl från jobbsamlaren.';
+    const t = bar.querySelector('.pb-ext-txt'); if (t.textContent !== txt) t.textContent = txt;
+    const lb = bar.querySelector('[data-a="load"]'), lbt = n ? 'Byt fil' : 'Läs in fil'; if (lb.textContent !== lbt) lb.textContent = lbt;
+    lb.hidden = extFromFolder; // filen i mappen går före, så det går inte att byta här
+    bar.querySelector('[data-a="clear"]').hidden = !n || extFromFolder;
+  }
+  async function importExt(file) {
+    let p = null;
+    try { p = parseExt(await file.text()); } catch {}
+    if (!p || !p.ads.length) { alert('Filen innehåller inga jobb från jobbsamlaren. Välj jobb_utanfor_platsbanken.jsonl från jobbsamlarens output-mapp.'); return; }
+    const val = Object.assign(p, { loadedAt: Date.now() });
+    try { if (api) await api.storage.local.set({ [EXT_KEY]: val }); }
+    catch (err) { alert('Kunde inte spara jobben: ' + (err && err.message || err)); return; }
+    if (!api || !api.storage.onChanged) extChanged(val);
+  }
+
   function tick(){
     ensureToolbar();
+    ensureExtBar();
     moveSortNextToTabs();
     if (panel && panel.classList.contains('pb-open')) adoptNativeMenus();
     movePagersIntoMetadata();
-    for(const card of getCards()) { ensureHideButtonInHeader(card); ensureCardTools(card); }
+    for(const card of getCards()) { ensureHideButtonInHeader(card); ensureCardTools(card); decorateExt(card); }
     applyVisibility();
     renderLoadBar();
     pullBar();

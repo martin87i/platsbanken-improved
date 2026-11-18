@@ -39,6 +39,17 @@ npx web-ext lint
 npx web-ext build
 ```
 Zip-filen hamnar i `web-ext-artifacts/`. Ladda inte upp den till git.
+Ta med `--ignore-files "fetched_ads/**"` så att jobbsamlarens fil inte kommer med i zip-filen.
+
+## Jobb från karriärsidor (fetched_ads)
+
+Jobbsamlaren kopierar `jobb_utanfor_platsbanken.jsonl` till `fetched_ads/` vid varje export. Finns
+filen där visar tillägget jobben under fliken Externa webbplatser. De kan läsas i högerfönstret och
+sparas i kartoteket med knappen Spara annons. Ladda om tillägget eller sidan efter en ny körning.
+Allt i mappen utom README.md står i `.gitignore` och tas inte med när tillägget publiceras.
+
+Chrome/Edge: sidans del av tillägget (hämtning av alla annonser, och inblandningen av de hämtade
+jobben) läggs in som ett inline-skript, och det blockeras av Chromium. Det fungerar i Firefox.
 
 ## Git
 

@@ -28,7 +28,7 @@ jobs:
       - name: Bygg zip
         run: |
           zip -r "$RUNNER_TEMP/chrome-extension.zip" . \
-            -x ".git/*" ".github/*" "*.md" "README.txt" "web-ext-artifacts/*"
+            -x ".git/*" ".github/*" "*.md" "README.txt" "web-ext-artifacts/*" "fetched_ads/*"
 
       # Laddar upp och skickar in för granskning
       - name: Skicka version till Chrome Web Store

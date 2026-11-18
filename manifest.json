@@ -3,7 +3,7 @@
   "name": "__MSG_extName__",
   "description": "__MSG_extDescription__",
   "default_locale": "sv",
-  "version": "2.70.1",
+  "version": "2.70.2",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
@@ -17,6 +17,11 @@
     "js": ["profiles.js", "kartotek.js", "content.js"],
     "run_at": "document_start",
     "all_frames": true
+  }],
+
+  "web_accessible_resources": [{
+    "resources": ["fetched_ads/*"],
+    "matches": ["https://arbetsformedlingen.se/*"]
   }],
 
   "action": {

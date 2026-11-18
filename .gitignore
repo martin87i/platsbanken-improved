@@ -1,0 +1,3 @@
+fetched_ads/*
+!fetched_ads/README.md
+web-ext-artifacts/
