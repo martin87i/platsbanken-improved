@@ -3,7 +3,7 @@
   "name": "__MSG_extName__",
   "description": "__MSG_extDescription__",
   "default_locale": "sv",
-  "version": "2.70.2",
+  "version": "2.70.3",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
