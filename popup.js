@@ -25,21 +25,29 @@
     }
   });
 
-  // Öppna tilläggshanteraren – fungerar utan "tabs"-permission
-  manageBtn.addEventListener('click', () => {
+  // Öppna tilläggshanteraren.
+  // Chrome: tabs.create kan öppna chrome://extensions (kräver ingen "tabs"-behörighet). window.open blockeras.
+  // Firefox: tillägg får inte öppna about:addons, så adressen kopieras och användaren klistrar in den i adressfältet.
+  manageBtn.addEventListener('click', async () => {
     const isFirefox =
       typeof InstallTrigger !== 'undefined' || navigator.userAgent.includes('Firefox');
-    const url = isFirefox ? 'about:addons' : 'chrome://extensions/';
-    try {
-      // Försök öppna direkt i nytt fönster/flik
-      window.open(url, '_blank');
-    } catch {
-      // Om det blockeras, öppna supportsida istället
-      const help = isFirefox
-        ? 'https://support.mozilla.org/kb/disable-or-remove-add-ons'
-        : 'https://support.google.com/chrome_webstore/answer/2664769';
-      window.open(help, '_blank');
+    if (!isFirefox) {
+      try {
+        await api.tabs.create({ url: 'chrome://extensions/?id=' + api.runtime.id });
+        window.close();
+        return;
+      } catch {
+        try { await api.tabs.create({ url: 'chrome://extensions/' }); window.close(); return; } catch {}
+      }
     }
+    const label = manageBtn.querySelector('.label') || manageBtn;
+    const old = label.textContent;
+    let copied = false;
+    try { await navigator.clipboard.writeText(isFirefox ? 'about:addons' : 'chrome://extensions/'); copied = true; } catch {}
+    label.textContent = copied
+      ? 'Kopierat! Klistra in i adressfältet'
+      : 'Skriv ' + (isFirefox ? 'about:addons' : 'chrome://extensions') + ' i adressfältet';
+    setTimeout(() => { label.textContent = old; }, 4000);
   });
 
   // Donera-knappen

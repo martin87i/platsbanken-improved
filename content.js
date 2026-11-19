@@ -1,6 +1,17 @@
 (function () {
   'use strict';
 
+  // Av/på-reglaget i popupen: när det är avstängt gör tillägget ingenting på sidan
+  const __api = (typeof browser !== 'undefined' && browser.storage) ? browser : ((typeof chrome !== 'undefined' && chrome.storage) ? chrome : null);
+  if (__api) {
+    try {
+      __api.storage.onChanged.addListener((ch, area) => { if (area === 'local' && ch.enabled && window.top === window.self) location.reload(); });
+    } catch {}
+    Promise.resolve(__api.storage.local.get({ enabled: true })).then((r) => { if (!r || r.enabled !== false) main(); }, () => main());
+  } else main();
+
+  function main() {
+
   if (!location.pathname.startsWith('/platsbanken')) return; // only on Platsbanken
   if (window.top !== window.self) {
     // I iframes (förhandsvisningen): bevaka bara spara-knappen och meddela sidan ovanför
@@ -1939,4 +1950,5 @@
     // kickstarta paginerings-flytten flera gånger (olika laddningsvägar)
     let n=0; const kick=setInterval(()=>{ movePagersIntoMetadata(); ensurePanel(); if(++n>8) clearInterval(kick); },250);
   }));
+  }
 })();
