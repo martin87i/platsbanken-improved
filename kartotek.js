@@ -840,6 +840,9 @@
       const grips = all.map((e) => e.querySelector('.grip')); grips.forEach((g) => { if (g) g.style.display = 'none'; });
       grips.forEach((g) => { if (g) g.style.display = ''; });
       if (all.length) {
+        // Grundtak: beskrivningen visar högst 10 rader, även om alla kort har lång text (annars blir korten hur höga som helst).
+        // Det lägsta kortets höjd sätter fortfarande taket om det är lägre, och höjdreglaget skalar vidare härifrån.
+        all.forEach((e) => { const lh = parseFloat(getComputedStyle(e._d).lineHeight) || 20; e._d.style.maxHeight = Math.round(lh * 10) + 'px'; });
         const m = all.map((e) => ({ e, h: e.offsetHeight, dh: e._d.offsetHeight }));
         const minH = Math.min.apply(null, m.map((x) => x.h));
         m.forEach((x) => { const cut = x.h - minH; if (cut > 0) x.cap = Math.max(20, x.dh - cut); });
